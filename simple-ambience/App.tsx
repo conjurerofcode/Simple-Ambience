@@ -5,9 +5,17 @@ import { SceneButton } from "./components/SceneButton";
 import { Scape, scapesList } from "./constants/Scape";
 import { Audio } from "expo-av";
 import { MaterialIcons } from "@expo/vector-icons";
+import { BackgroundColors, InvertedColors } from "./constants/Colors";
 
 import Animated, {
+  FadeIn,
+  FadeInDown,
+  FlipInYRight,
   interpolateColor,
+  RotateInDownLeft,
+  RotateOutUpRight,
+  SlideInRight,
+  SlideOutLeft,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -16,13 +24,20 @@ import Animated, {
 
 type LoopFunction = "LOOP" | "CYCLE" | "OFF";
 
-const colorz = [
-  "rgb(54, 56, 52)",
-  "rgb(80, 83, 166)",
-  "rgb(43, 17, 44)",
-  "rgb(97, 101, 36)",
-  "rgb(62, 176, 183)",
-];
+// const colorz = [
+//   "rgb(54, 56, 52)",
+//   "rgb(80, 83, 166)",
+//   "rgb(43, 17, 44)",
+//   "rgb(97, 101, 36)",
+//   "rgb(62, 176, 183)",
+// ];
+// const fontColorz = [
+//   "rgb(201, 199, 203)",
+//   "rgb(175, 172, 89)",
+//   "rgb(212, 238, 211)",
+//   "rgb(158, 154, 219)",
+//   "rgb(193, 79, 72)",
+// ];
 export default function App() {
   const [audio, setAudio] = useState<Audio.Sound>(new Audio.Sound());
   const [isPlaying, setIsPlaying] = useState(false);
@@ -32,16 +47,15 @@ export default function App() {
   const currIndex = useSharedValue(0);
   const progress = useSharedValue(0);
 
-  const [bgColor, setBgColor] = useState(colorz[currIndex.value]);
+  const [bgColor, setBgColor] = useState([
+    BackgroundColors[currIndex.value],
+    BackgroundColors[currIndex.value],
+  ]);
 
-  // const animatedColor = useAnimatedStyle(() => {
-  //   const backgroundColor = interpolateColor(
-  //     progress.value,
-  //     [0, 1],
-  //     ["white", "black"]
-  //   );
-  //   return { backgroundColor };
-  // });
+  const [invertedBgColor, setInvertedBgColor] = useState([
+    InvertedColors[currIndex.value],
+    InvertedColors[currIndex.value],
+  ]);
 
   let ran = false;
   const init = async () => {
@@ -59,6 +73,16 @@ export default function App() {
     init();
   }, []);
 
+  useEffect(() => {
+    console.log(`Active index: ${activeIndex}`);
+  }, [activeIndex]);
+
+  const newProgress = useSharedValue(0);
+  useEffect(() => {
+    console.log(`Background COlor: ${bgColor}`);
+    newProgress.value = newProgress.value === 0 ? withTiming(1) : withTiming(0);
+  }, [bgColor]);
+
   const pausePlay = async () => {
     if (isPlaying) {
       await audio.pauseAsync();
@@ -68,15 +92,25 @@ export default function App() {
     setIsPlaying((prev) => !prev);
   };
 
-  const bgTransition = async (prevIndex: number, nextIndex: number) => {
-    // Animated.timing(progress, {
-    //   toValue: 1,
-    //   duration: 500
-    // }).start();
-    console.log(`change colors from index ${prevIndex} to ${nextIndex}`);
+  const transitionBackground = async (prevIndex: number, nextIndex: number) => {
+    const colors =
+      newProgress.value === 0
+        ? [BackgroundColors[prevIndex], BackgroundColors[nextIndex]]
+        : [BackgroundColors[nextIndex], BackgroundColors[prevIndex]];
+
+    const invertedColors =
+      newProgress.value === 0
+        ? [InvertedColors[prevIndex], InvertedColors[nextIndex]]
+        : [InvertedColors[nextIndex], InvertedColors[prevIndex]];
+
+    await setBgColor((prev) => [...colors]);
+    await setInvertedBgColor((prev) => invertedColors);
+
+    progress.value = withTiming(nextIndex);
+    // console.log(`change colors from index ${prevIndex} to ${nextIndex}`);
   };
 
-  const transition = async (newIndex: number) => {
+  const transitionAudio = async (newIndex: number) => {
     await audio.pauseAsync();
     await audio.unloadAsync();
     await audio.loadAsync(scapesList[newIndex].track);
@@ -86,16 +120,15 @@ export default function App() {
   };
 
   const changeScene = async (newIdx: number) => {
-    console.log(progress.value);
     const previousIndex = currIndex.value;
-    await bgTransition(previousIndex, newIdx);
+    await transitionBackground(previousIndex, newIdx);
     if (newIdx == activeIndex) pausePlay();
     else {
       await setActiveIndex(newIdx);
       currIndex.value = newIdx;
-      transition(newIdx);
+      transitionAudio(newIdx);
     }
-    console.log(`${scapesList[currIndex.value].bgColor}`);
+    //console.log(`${scapesList[currIndex.value].bgColor}`);
   };
 
   function throttle(cb: Function, delay = 1000) {
@@ -112,6 +145,13 @@ export default function App() {
       }, delay);
     };
   }
+
+  const sceneButtonHandler = (newIndex: number) => {
+    throttle(() => {
+      changeScene(newIndex);
+    });
+  };
+
   const loopCycleHandler = () => {
     switch (loopOrCycle) {
       case "CYCLE":
@@ -128,47 +168,100 @@ export default function App() {
     }
   };
 
-  const rColor = useAnimatedStyle(() => {
-    // const backgroundColor = interpolateColor(
-    //   progress.value,
-    //   [0, 1],
-    //   [bgColor, colorz[activeIndex]]
-    // );
+  // Source: https://stackoverflow.com/a/54569758
+  // function invertHex(hex: string) {
+  //   return (Number(`0x1${hex}`) ^ 0xffffff)
+  //     .toString(16)
+  //     .substring(1)
+  //     .toUpperCase();
+  // }
 
-    return { backgroundColor: colorz[currIndex.value] };
+  const rColor = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(
+      newProgress.value,
+      [0, 1],
+      bgColor
+    );
+
+    return { backgroundColor };
   });
-  // const rColor = useAnimatedStyle(() => {
-  //   return { backgroundColor: colorz[activeIndex] };
-  // });
+
+  const rInvertedText = useAnimatedStyle(() => {
+    const color = interpolateColor(newProgress.value, [0, 1], invertedBgColor);
+
+    return { color };
+  });
+
+  const rInvertedColor = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(
+      newProgress.value,
+      [0, 1],
+      invertedBgColor
+    );
+
+    return { backgroundColor };
+  });
 
   return (
     <Animated.View style={[styles.main, rColor]}>
       <Animated.View style={[styles.top]}>
-        <Text style={[styles.title]}>Simple Ambience</Text>
-        <View style={styles.features}>
-          <TouchableOpacity
-            style={styles.loopButton}
-            onPress={loopCycleHandler}
-          >
-            {loopOrCycle === "OFF" && (
-              <Text style={{ fontSize: 20 }}>Loop / Cycle</Text>
-            )}
-            {loopOrCycle === "LOOP" && (
-              <MaterialIcons name="repeat" size={50} color="black" />
-            )}
-            {loopOrCycle === "CYCLE" && (
-              <MaterialIcons name="queue-play-next" size={50} color="black" />
-            )}
-          </TouchableOpacity>
+        <Animated.Text
+          style={[styles.title, rInvertedText, rColor, { fontSize: 65 }]}
+        >
+          Simple Ambience
+        </Animated.Text>
+
+        <View style={[styles.features]}>
+          <Animated.View style={[styles.loopButton, rInvertedColor]}>
+            <TouchableOpacity
+              style={{ justifyContent: "center", alignItems: "center" }}
+              onPress={loopCycleHandler}
+              activeOpacity={1}
+            >
+              {loopOrCycle === "OFF" && (
+                <Animated.View
+                  entering={RotateInDownLeft}
+                  exiting={RotateOutUpRight}
+                >
+                  <Text style={{ fontSize: 20 }}>Loop / Cycle</Text>
+                </Animated.View>
+              )}
+              {loopOrCycle === "LOOP" && (
+                <Animated.View
+                  entering={RotateInDownLeft}
+                  exiting={RotateOutUpRight}
+                >
+                  <MaterialIcons name="repeat" size={50} color="black" />
+                </Animated.View>
+              )}
+              {loopOrCycle === "CYCLE" && (
+                <Animated.View
+                  entering={RotateInDownLeft}
+                  exiting={RotateOutUpRight}
+                >
+                  <MaterialIcons
+                    name="queue-play-next"
+                    size={50}
+                    color="black"
+                  />
+                </Animated.View>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
           <TouchableOpacity></TouchableOpacity>
         </View>
       </Animated.View>
       <View style={styles.sceneSelection}>
-        <SceneButton index={0} scape={scapesList[0]} onPress={changeScene} />
-        <SceneButton index={1} scape={scapesList[1]} onPress={changeScene} />
-        <SceneButton index={2} scape={scapesList[2]} onPress={changeScene} />
-        <SceneButton index={3} scape={scapesList[3]} onPress={changeScene} />
-        <SceneButton index={4} scape={scapesList[4]} onPress={changeScene} />
+        {scapesList.map((scape, index, arr) => {
+          return (
+            <SceneButton
+              key={index}
+              index={index}
+              scape={scape}
+              onPress={changeScene}
+            ></SceneButton>
+          );
+        })}
       </View>
       <StatusBar style="auto" />
     </Animated.View>
@@ -182,27 +275,27 @@ const styles = StyleSheet.create({
     justifyContent: "space-evenly",
   },
   top: {
-    height: "80%",
+    height: "90%",
     width: "100%",
     alignItems: "center",
   },
   title: {
+    position: "absolute",
     height: "100%",
     width: "75%",
-    fontSize: 50,
     color: "white",
     textAlign: "center",
     top: 100,
+    fontWeight: "bold",
   },
   features: {
     width: "100%",
     height: "15%",
     position: "absolute",
     bottom: 0,
-    borderColor: "black",
-    borderWidth: 1,
     justifyContent: "center",
-    paddingLeft: 10,
+    paddingLeft: 20,
+    marginBottom: 10,
   },
   sceneSelection: {
     flex: 1,
@@ -210,14 +303,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-evenly",
     flexDirection: "row",
-    backgroundColor: "rgba(0, 0, 0, 0.25)",
     paddingTop: 20,
   },
   loopButton: {
-    borderColor: "black",
-    borderWidth: 1,
-    width: "20%",
-    height: "80%",
+    borderRadius: 500,
+    height: 80,
+    width: 80,
     justifyContent: "center",
     alignItems: "center",
   },
